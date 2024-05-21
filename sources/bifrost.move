@@ -3,24 +3,62 @@
 
 module bifrost::asgard {
     use std::string;
+    use sui::table::{Self, Table};
     use sui::object::{Self, UID};
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
+    use wormhole::emitter::{Self, EmitterCap};
+    use wormhole::external_address::ExternalAddress;
+    use wormhole::state::{State as WormholeState};
 
-    /// An object that contains an arbitrary string
-    public struct HelloWorldObject has key, store {
+    public struct State has key, store {
         id: UID,
-        /// A string contained in the object
-        text: string::String
+        emitter_cap: EmitterCap,
     }
 
-    #[lint_allow(self_transfer)]
-    public fun mint(ctx: &mut TxContext) {
-        let object = HelloWorldObject {
+
+    public struct Channel has store {
+        channel_id: u32,
+        external_address: ExternalAddress,
+    }
+
+    public struct ChannelManager has key {
+        id: UID,
+        channels: Table<u32, Channel>,
+    }
+
+    /// Register ourselves as a wormhole emitter. This gives back an
+    /// `EmitterCap` which will be required to send messages through
+    /// wormhole.
+    fun init(
+        // wormhole_state: &WormholeState,
+        ctx: &mut TxContext
+    ) {
+        // transfer::share_object(
+        //     State {
+        //         id: object::new(ctx),
+        //         emitter_cap: emitter::new(wormhole_state, ctx)
+        //     }
+        // );
+        let channels = table::new<u32, Channel>(ctx);
+        let manager = ChannelManager {
             id: object::new(ctx),
-            text: string::utf8(b"Hello World!")
+            channels,
         };
-        transfer::public_transfer(object, tx_context::sender(ctx));
+        transfer::share_object(manager);
+    }
+
+    public fun spawn_channel(
+        manager: &mut ChannelManager,
+        channel_id: u32,
+        external_address: ExternalAddress,
+        _ctx: &mut TxContext,
+    ) {
+        let channel = Channel {
+            channel_id,
+            external_address,
+        };
+        table::add(&mut manager.channels, channel_id, channel);
     }
 
 
