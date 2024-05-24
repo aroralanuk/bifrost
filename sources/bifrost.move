@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: MIT
 
 module bifrost::asgard {
-    use std::string;
     use sui::table::{Self, Table};
-    use sui::object::{Self, UID};
-    use sui::transfer;
-    use sui::tx_context::{Self, TxContext};
     use wormhole::emitter::{Self, EmitterCap};
     use wormhole::external_address::ExternalAddress;
     use wormhole::state::{State as WormholeState};
     use wormhole::publish_message::{MessageTicket};
+    use bifrost::remote_calls_meta::{Self, RemoteCallsMeta};
 
     public struct State has key, store {
         id: UID,
@@ -50,31 +47,27 @@ module bifrost::asgard {
         *table::borrow(&state.channels, channel_id)
     }
 
-    // public fun prepare_remote_calls(
-    //     state: &State,
-    //     channel_id: u32,
-    //     message: string,
-    //     _ctx: &mut TxContext,
-    // ): MessageTicket {
+    public fun prepare_remote_calls(
+        state: &mut State,
+        nonce: u32,
+        message: RemoteCallsMeta,
+        _ctx: &mut TxContext,
+    ): MessageTicket {
+        let encoded_message = remote_calls_meta::serialize(message);
 
-    // }
-
-    // public fun serial_remote_calls(
-    //     state: &State,
-    //     channel_id: u32,
-    //     message: string,
-    //     _ctx: &mut TxContext,
-    // ) {
-    //     let external_address = channel(state, channel_id);
-    //     emitter::send_message(state.emitter_cap, external_address, message);
-    // }
-    
+        wormhole::publish_message::prepare_message(
+            &mut state.emitter_cap,
+            nonce,
+            encoded_message
+        )
+    }
 }
 
 #[test_only]
 module bifrost::asgard_test {
     use sui::table::{Self};
     use sui::test_scenario::{Self};
+    use wormhole::publish_message::{Self};
     use wormhole::wormhole_scenario::{
         return_clock,
         return_state,
@@ -82,16 +75,19 @@ module bifrost::asgard_test {
         take_clock,
         take_state,
         two_people,
+        person,
     };
-    use wormhole::external_address::Self;
+    use wormhole::external_address::{Self, ExternalAddress};
     use wormhole::bytes32::Self;
 
     use bifrost::asgard::{
         init_with_params,
         channel,
         spawn_channel,
+        prepare_remote_calls,
         State,
     };
+    use bifrost::remote_calls_meta::{Self, RemoteCallsMeta};
 
     #[test]
     fun test_spawn_channel() {
@@ -126,6 +122,52 @@ module bifrost::asgard_test {
 
             test_scenario::return_shared(state);
         };
+        test_scenario::end(my_scenario);
+    }
+
+    #[test]
+    fun test_prepare_remote_calls() {
+        let (user, admin) = two_people();
+        let mut my_scenario = test_scenario::begin(admin);
+        let scenario = &mut my_scenario;
+
+        // Initialize Wormhole.
+        let wormhole_message_fee = 0;
+        set_up_wormhole(scenario, wormhole_message_fee);
+
+        // Initialize sender module.
+        test_scenario::next_tx(scenario, admin);
+        {
+            let wormhole_state = take_state(scenario);
+            init_with_params(&wormhole_state, test_scenario::ctx(scenario));
+            return_state(wormhole_state);
+        };
+
+        // Send message as an ordinary user.
+        test_scenario::next_tx(scenario, user);
+        {
+            let mut state = test_scenario::take_shared<State>(scenario);
+            let wormhole_state = take_state(scenario);
+            let the_clock = take_clock(scenario);
+
+            let call_meta = remote_calls_meta::new(
+                vector::empty<ExternalAddress>(),
+                vector::empty<vector<u8>>(),
+            );
+            let ticket = prepare_remote_calls(
+                &mut state,
+                1,
+                call_meta,
+                test_scenario::ctx(scenario),
+            );
+            publish_message::destroy(ticket);
+
+            // Clean up.
+            test_scenario::return_shared(state);
+            return_state(wormhole_state);
+            return_clock(the_clock);
+        };
+
         test_scenario::end(my_scenario);
     }
 }

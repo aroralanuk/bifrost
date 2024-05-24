@@ -12,7 +12,25 @@ module bifrost::remote_calls_meta {
         remote_calls: vector<RemoteCallMeta>,
     }
 
-    public fun serialze(meta: RemoteCallsMeta): vector<u8>  {
+    public fun new(
+        to: vector<ExternalAddress>,
+        calldata: vector<vector<u8>>,
+    ): RemoteCallsMeta {
+        let mut remote_calls = vector::empty<RemoteCallMeta>();
+        let mut i = 0;
+        let n = vector::length(&to);
+        while (i < n) {
+            let call = RemoteCallMeta {
+                to: *vector::borrow(&to, i),
+                calldata: *vector::borrow(&calldata, i),
+            };
+            vector::push_back(&mut remote_calls, call);
+            i = i + 1;
+        };
+        RemoteCallsMeta { remote_calls }
+    }
+
+    public(package) fun serialize(meta: RemoteCallsMeta): vector<u8>  {
         let mut buf = vector::empty<u8>();
         let mut i = 0;
         let n = vector::length(&meta.remote_calls);
