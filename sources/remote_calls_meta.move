@@ -3,12 +3,12 @@
 module bifrost::remote_calls_meta {
     use wormhole::external_address::{Self, ExternalAddress};
 
-    public struct RemoteCallMeta has drop {
+    public struct RemoteCallMeta has drop, copy {
         to: ExternalAddress,
         calldata: vector<u8>,
     }
 
-    public struct RemoteCallsMeta has drop {
+    public struct RemoteCallsMeta has drop, copy {
         remote_calls: vector<RemoteCallMeta>,
     }
 

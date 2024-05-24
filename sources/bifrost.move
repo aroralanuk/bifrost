@@ -65,8 +65,8 @@ module bifrost::asgard {
 
 #[test_only]
 module bifrost::asgard_test {
-    use sui::table::{Self};
     use sui::test_scenario::{Self};
+    use sui::coin::{Self};
     use wormhole::publish_message::{Self};
     use wormhole::wormhole_scenario::{
         return_clock,
@@ -75,7 +75,6 @@ module bifrost::asgard_test {
         take_clock,
         take_state,
         two_people,
-        person,
     };
     use wormhole::external_address::{Self, ExternalAddress};
     use wormhole::bytes32::Self;
@@ -87,7 +86,7 @@ module bifrost::asgard_test {
         prepare_remote_calls,
         State,
     };
-    use bifrost::remote_calls_meta::{Self, RemoteCallsMeta};
+    use bifrost::remote_calls_meta::{Self};
 
     #[test]
     fun test_spawn_channel() {
@@ -118,7 +117,7 @@ module bifrost::asgard_test {
                 external_address::new(data),
                 test_scenario::ctx(scenario),
             );
-            assert!(channel(&mut state, 1) == external_address::new(data));
+            assert!(channel(&state, 1) == external_address::new(data));
 
             test_scenario::return_shared(state);
         };
@@ -147,7 +146,7 @@ module bifrost::asgard_test {
         test_scenario::next_tx(scenario, user);
         {
             let mut state = test_scenario::take_shared<State>(scenario);
-            let wormhole_state = take_state(scenario);
+            let mut wormhole_state = take_state(scenario);
             let the_clock = take_clock(scenario);
 
             let call_meta = remote_calls_meta::new(
@@ -157,9 +156,39 @@ module bifrost::asgard_test {
             let ticket = prepare_remote_calls(
                 &mut state,
                 1,
-                call_meta,
+                copy call_meta,
                 test_scenario::ctx(scenario),
             );
+
+            
+            
+            let message_sequence = publish_message::publish_message(
+                &mut wormhole_state,
+                coin::zero(test_scenario::ctx(scenario)),
+                prepare_remote_calls(
+                    &mut state,
+                    1,
+                    call_meta,
+                    test_scenario::ctx(scenario),
+                ),
+                &the_clock,
+            );
+            std::debug::print(&message_sequence);
+            assert!(message_sequence == 1, 0);
+
+            let message_sequence = publish_message::publish_message(
+                &mut wormhole_state,
+                coin::zero(test_scenario::ctx(scenario)),
+                prepare_remote_calls(
+                    &mut state,
+                    1,
+                    call_meta,
+                    test_scenario::ctx(scenario),
+                ),
+                &the_clock,
+            );
+            assert!(message_sequence == 2, 0);
+            
             publish_message::destroy(ticket);
 
             // Clean up.
